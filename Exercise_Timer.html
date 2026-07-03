@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<title>Exercise Timer</title>
+<style>
+  :root{
+    --bg:#FAF6F1;
+    --surface:#FFFFFF;
+    --surface-2:#F2EAD9;
+    --ink:#2B2620;
+    --ink-soft:#7A7266;
+    --accent:#BE6A3D;
+    --accent-soft:#EFD9C4;
+    --sage:#7C8C6F;
+    --sage-soft:#E3E8DC;
+    --line:#E7DFD0;
+    --ring-track:#EFE7D8;
+    --shadow: 0 1px 2px rgba(43,38,32,.04), 0 8px 24px rgba(43,38,32,.06);
+    --font-display: ui-serif, Georgia, "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--font-body);
+    -webkit-font-smoothing:antialiased;
+    display:flex;
+    justify-content:center;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  .app{
+    width:100%;
+    max-width:440px;
+    padding:28px 20px 40px;
+    display:flex;
+    flex-direction:column;
+    gap:22px;
+    min-height:100%;
+  }
+
+  .app__header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .app__header h1{
+    font-family:var(--font-display);
+    font-size:22px;
+    font-weight:600;
+    letter-spacing:.2px;
+    margin:0;
+  }
+
+  .icon-btn{
+    width:40px; height:40px;
+    border-radius:999px;
+    border:1px solid var(--line);
+    background:var(--surface);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    color:var(--ink-soft);
+    transition:background .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .icon-btn:hover{ background:var(--surface-2); }
+  .icon-btn[aria-pressed="true"]{
+    background:var(--accent-soft);
+    border-color:var(--accent);
+    color:var(--accent);
+  }
+  .icon-btn svg{ width:18px; height:18px; }
+
+  button:focus-visible, input:focus-visible, select:focus-visible{
+    outline:2px solid var(--accent);
+    outline-offset:2px;
+  }
+
+  /* --- mode switch --- */
+  .mode-switch{
+    display:flex;
+    background:var(--surface-2);
+    border-radius:12px;
+    padding:4px;
+    gap:4px;
+  }
+  .mode-btn{
+    flex:1;
+    border:0;
+    background:transparent;
+    color:var(--ink-soft);
+    font-family:var(--font-body);
+    font-size:14px;
+    font-weight:600;
+    padding:9px 0;
+    border-radius:9px;
+    cursor:pointer;
+    transition:background .15s ease, color .15s ease, box-shadow .15s ease;
+  }
+  .mode-btn.is-active{
+    background:var(--surface);
+    color:var(--ink);
+    box-shadow:var(--shadow);
+  }
+  .mode-btn:disabled{ cursor:not-allowed; opacity:.55; }
+
+  /* --- ring --- */
+  .ring-wrap{
+    position:relative;
+    width:100%;
+    max-width:300px;
+    margin:6px auto 0;
+    aspect-ratio:1/1;
+  }
+  .ring{ width:100%; height:100%; display:block; transform:rotate(0deg); }
+  .ring__track{ fill:none; stroke:var(--ring-track); stroke-width:14; }
+  .ring__tick{ stroke:var(--surface); stroke-width:2; }
+  .ring__progress{
+    fill:none;
+    stroke:var(--accent);
+    stroke-width:14;
+    stroke-linecap:round;
+    transform-origin:110px 110px;
+    transform:rotate(-90deg);
+    transition:stroke-dashoffset .18s linear, stroke .25s ease;
+  }
+  .ring__progress.is-rest{ stroke:var(--sage); }
+  @media (prefers-reduced-motion: reduce){
+    .ring__progress{ transition:stroke .25s ease; }
+  }
+
+  .ring__center{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:6px;
+    text-align:center;
+    padding:0 16px;
+  }
+  .ring__time{
+    font-family:var(--font-display);
+    font-size:52px;
+    font-weight:600;
+    line-height:1;
+    font-variant-numeric:tabular-nums;
+    letter-spacing:.5px;
+  }
+  .ring__phase{
+    font-size:13px;
+    font-weight:600;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+  }
+  .ring__phase.is-work{ color:var(--accent); }
+  .ring__phase.is-rest{ color:var(--sage); }
+  .ring__round{
+    font-family:var(--font-mono);
+    font-size:12px;
+    color:var(--ink-soft);
+  }
+
+  .status-msg{
+    min-height:18px;
+    text-align:center;
+    font-size:13px;
+    color:var(--ink-soft);
+    margin:0;
+  }
+
+  /* --- config --- */
+  .config{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:14px 16px;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  .field-row{
+    display:flex;
+    gap:10px;
+  }
+  .field{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .field label{
+    font-size:12px;
+    font-weight:600;
+    color:var(--ink-soft);
+    letter-spacing:.02em;
+  }
+  .stepper{
+    display:flex;
+    align-items:center;
+    border:1px solid var(--line);
+    border-radius:10px;
+    overflow:hidden;
+    background:var(--bg);
+  }
+  .stepper input{
+    width:100%;
+    border:0;
+    background:transparent;
+    padding:9px 8px;
+    font-family:var(--font-mono);
+    font-size:15px;
+    color:var(--ink);
+    text-align:center;
+  }
+  .stepper input:disabled{ color:var(--ink-soft); }
+  .stepper .unit{
+    font-size:11px;
+    color:var(--ink-soft);
+    padding-right:10px;
+    white-space:nowrap;
+  }
+  select{
+    width:100%;
+    border:1px solid var(--line);
+    border-radius:10px;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--font-body);
+    font-size:13px;
+    padding:9px 10px;
+  }
+  select:disabled{ color:var(--ink-soft); }
+
+  /* --- controls --- */
+  .controls{
+    display:flex;
+    gap:10px;
+    margin-top:auto;
+    padding-top:6px;
+  }
+  .btn{
+    flex:1;
+    border-radius:12px;
+    padding:14px 0;
+    font-family:var(--font-body);
+    font-size:15px;
+    font-weight:700;
+    letter-spacing:.02em;
+    cursor:pointer;
+    border:1px solid transparent;
+    transition:transform .08s ease, background .15s ease, box-shadow .15s ease;
+  }
+  .btn:active{ transform:scale(.98); }
+  .btn--primary{
+    background:var(--accent);
+    color:#FFF7EF;
+    box-shadow:var(--shadow);
+  }
+  .btn--primary.is-paused{ background:var(--sage); }
+  .btn--ghost{
+    background:var(--surface);
+    border-color:var(--line);
+    color:var(--ink-soft);
+  }
+  .btn--ghost:hover{ background:var(--surface-2); }
+
+  .visually-hidden{
+    position:absolute; width:1px; height:1px;
+    overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap;
+  }
+</style>
+</head>
+<body>
+<main class="app">
+
+  <header class="app__header">
+    <h1>Exercise Timer</h1>
+    <button id="muteBtn" class="icon-btn" type="button" aria-pressed="false" aria-label="Mute beeps and voice">
+      <svg id="muteIconOn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 5V4L8 9H4Z"/><path d="M16 8.5a5 5 0 0 1 0 7"/><path d="M18.5 6a8.5 8.5 0 0 1 0 12"/></svg>
+      <svg id="muteIconOff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M4 9v6h4l5 5V4L8 9H4Z"/><path d="M16 9l5 5M21 9l-5 5"/></svg>
+    </button>
+  </header>
+
+  <div class="mode-switch" role="tablist" aria-label="Timer mode">
+    <button class="mode-btn is-active" id="modeCountdownBtn" type="button" role="tab" aria-selected="true" data-mode="countdown">Countdown</button>
+    <button class="mode-btn" id="modeIntervalBtn" type="button" role="tab" aria-selected="false" data-mode="interval">Intervals</button>
+  </div>
+
+  <div class="ring-wrap">
+    <svg class="ring" viewBox="0 0 220 220" aria-hidden="true">
+      <circle class="ring__track" cx="110" cy="110" r="96"></circle>
+      <g id="ringTicks"></g>
+      <circle class="ring__progress" id="ringProgress" cx="110" cy="110" r="96"></circle>
+    </svg>
+    <div class="ring__center">
+      <div class="ring__time" id="timeDisplay">01:30</div>
+      <div class="ring__phase" id="phaseLabel">Ready</div>
+      <div class="ring__round" id="roundLabel" hidden></div>
+    </div>
+  </div>
+
+  <p class="status-msg" id="statusMsg" role="status" aria-live="polite"></p>
+
+  <section class="config" id="countdownConfig">
+    <div class="field-row">
+      <div class="field">
+        <label for="durationInput">Duration</label>
+        <div class="stepper">
+          <input type="number" id="durationInput" min="5" max="7200" step="5" value="90" inputmode="numeric">
+          <span class="unit">sec</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="config" id="intervalConfig" hidden>
+    <div class="field-row">
+      <div class="field">
+        <label for="workInput">Work</label>
+        <div class="stepper">
+          <input type="number" id="workInput" min="5" max="1800" step="5" value="40" inputmode="numeric">
+          <span class="unit">sec</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="restInput">Rest</label>
+        <div class="stepper">
+          <input type="number" id="restInput" min="0" max="1800" step="5" value="20" inputmode="numeric">
+          <span class="unit">sec</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="roundsInput">Rounds</label>
+        <div class="stepper">
+          <input type="number" id="roundsInput" min="1" max="99" step="1" value="8" inputmode="numeric">
+          <span class="unit">&nbsp;</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="config">
+    <div class="field">
+      <label for="verbositySelect">Beep cadence</label>
+      <select id="verbositySelect">
+        <option value="1">Every second</option>
+        <option value="2" selected>Every 5s, then every second in the final 10s</option>
+      </select>
+    </div>
+  </section>
+
+  <div class="controls">
+    <button id="resetBtn" class="btn btn--ghost" type="button">Reset</button>
+    <button id="primaryBtn" class="btn btn--primary" type="button">Start</button>
+  </div>
+
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- DOM ----------
+  const el = {
+    muteBtn: document.getElementById('muteBtn'),
+    muteIconOn: document.getElementById('muteIconOn'),
+    muteIconOff: document.getElementById('muteIconOff'),
+    modeCountdownBtn: document.getElementById('modeCountdownBtn'),
+    modeIntervalBtn: document.getElementById('modeIntervalBtn'),
+    countdownConfig: document.getElementById('countdownConfig'),
+    intervalConfig: document.getElementById('intervalConfig'),
+    durationInput: document.getElementById('durationInput'),
+    workInput: document.getElementById('workInput'),
+    restInput: document.getElementById('restInput'),
+    roundsInput: document.getElementById('roundsInput'),
+    verbositySelect: document.getElementById('verbositySelect'),
+    ringProgress: document.getElementById('ringProgress'),
+    ringTicks: document.getElementById('ringTicks'),
+    timeDisplay: document.getElementById('timeDisplay'),
+    phaseLabel: document.getElementById('phaseLabel'),
+    roundLabel: document.getElementById('roundLabel'),
+    statusMsg: document.getElementById('statusMsg'),
+    resetBtn: document.getElementById('resetBtn'),
+    primaryBtn: document.getElementById('primaryBtn'),
+  };
+
+  const RING_R = 96;
+  const RING_C = 2 * Math.PI * RING_R;
+  el.ringProgress.style.strokeDasharray = String(RING_C);
+
+  // tick marks every 10% around the ring (functional progress markers)
+  (function drawTicks() {
+    const cx = 110, cy = 110, rOuter = 106, rInner = 100;
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+      const x1 = cx + rInner * Math.cos(a), y1 = cy + rInner * Math.sin(a);
+      const x2 = cx + rOuter * Math.cos(a), y2 = cy + rOuter * Math.sin(a);
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+      line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+      line.setAttribute('class', 'ring__tick');
+      el.ringTicks.appendChild(line);
+    }
+  })();
+
+  // ---------- state ----------
+  const state = {
+    mode: 'countdown',
+    status: 'idle', // idle | running | paused | finished
+    verbosity: '2',
+    muted: false,
+  };
+
+  let baseMs = 0;
+  let startTs = 0;
+  let ticker = null;
+  let lastSec = null;
+  let lastPhaseKey = '';
+  let announcedHalfway = false;
+  let wakeLockRef = null;
+
+  // ---------- audio (synthesized — no file fetch/decode, nothing to 404) ----------
+  let audioCtx = null;
+
+  function unlockAudio() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      // Play a silent buffer synchronously inside the gesture. Belt-and-braces
+      // unlock for iOS Safari, where resume() alone is sometimes not enough.
+      const buf = audioCtx.createBuffer(1, 1, 22050);
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      src.connect(audioCtx.destination);
+      src.start(0);
+    } catch (e) { /* Web Audio unsupported — timer still runs, silently */ }
+  }
+
+  function tone(freq, startAt, duration, gainPeak) {
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    const t0 = audioCtx.currentTime + startAt;
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(gainPeak, t0 + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(t0);
+    osc.stop(t0 + duration + 0.02);
+  }
+
+  function beep() {
+    if (state.muted) return;
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      tone(880, 0, 0.11, 0.16);
+    } catch (e) {}
+  }
+
+  function chime() {
+    if (state.muted) return;
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      tone(660, 0, 0.14, 0.16);
+      tone(880, 0.15, 0.22, 0.18);
+    } catch (e) {}
+  }
+
+  function speak(text, cancelPrev) {
+    if (state.muted) return;
+    try {
+      if (!window.speechSynthesis) return;
+      if (cancelPrev) window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'en-US';
+      u.rate = 1.05;
+      window.speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+
+  // ---------- wake lock ----------
+  async function acquireWake() {
+    try {
+      if ('wakeLock' in navigator) wakeLockRef = await navigator.wakeLock.request('screen');
+    } catch (e) { /* unsupported or denied — timer still runs */ }
+  }
+  function releaseWake() {
+    try { if (wakeLockRef) { wakeLockRef.release(); wakeLockRef = null; } } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && state.status === 'running') acquireWake();
+  });
+
+  // ---------- config helpers ----------
+  function cfg() {
+    return {
+      duration: clampInt(el.durationInput.value, 5, 7200, 90),
+      work: clampInt(el.workInput.value, 5, 1800, 40),
+      rest: clampInt(el.restInput.value, 0, 1800, 20),
+      rounds: clampInt(el.roundsInput.value, 1, 99, 8),
+    };
+  }
+  function clampInt(v, min, max, fallback) {
+    const n = parseInt(v, 10);
+    if (isNaN(n)) return fallback;
+    return Math.min(max, Math.max(min, n));
+  }
+  function fmt(sec) {
+    sec = Math.max(0, Math.ceil(sec));
+    const m = Math.floor(sec / 60), s = sec % 60;
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+  function setInputsDisabled(disabled) {
+    [el.modeCountdownBtn, el.modeIntervalBtn, el.durationInput, el.workInput,
+     el.restInput, el.roundsInput, el.verbositySelect].forEach(node => {
+      if (node.tagName === 'BUTTON') node.disabled = disabled;
+      else node.disabled = disabled;
+    });
+  }
+
+  // ---------- interval math ----------
+  // Total time excludes a trailing rest after the final round's work block.
+  function intervalTotalSec(c) { return c.rounds * c.work + (c.rounds - 1) * c.rest; }
+
+  function intervalPhaseAt(elapsedSec, c) {
+    let t = elapsedSec;
+    for (let round = 1; round <= c.rounds; round++) {
+      if (t < c.work) return { phase: 'work', round, remaining: c.work - t };
+      t -= c.work;
+      if (round < c.rounds) {
+        if (t < c.rest) return { phase: 'rest', round, remaining: c.rest - t };
+        t -= c.rest;
+      }
+    }
+    return null; // finished
+  }
+
+  // ---------- rendering ----------
+  function renderRing(fraction, phase) {
+    const offset = RING_C * (1 - Math.max(0, Math.min(1, fraction)));
+    el.ringProgress.style.strokeDashoffset = String(offset);
+    el.ringProgress.classList.toggle('is-rest', phase === 'rest');
+  }
+
+  function renderIdlePreview() {
+    if (state.mode === 'countdown') {
+      const c = cfg();
+      el.timeDisplay.textContent = fmt(c.duration);
+      el.phaseLabel.textContent = 'Ready';
+      el.phaseLabel.className = 'ring__phase';
+      el.roundLabel.hidden = true;
+      renderRing(0, '');
+    } else {
+      const c = cfg();
+      el.timeDisplay.textContent = fmt(c.work);
+      el.phaseLabel.textContent = 'Ready';
+      el.phaseLabel.className = 'ring__phase';
+      el.roundLabel.hidden = false;
+      el.roundLabel.textContent = 'Round 1 / ' + c.rounds;
+      renderRing(0, '');
+    }
+  }
+
+  // ---------- core loop ----------
+  function tick() {
+    if (state.status !== 'running') return;
+    const elapsedMs = baseMs + (Date.now() - startTs);
+    const elapsedSec = elapsedMs / 1000;
+
+    if (state.mode === 'countdown') {
+      const c = cfg();
+      const remaining = c.duration - elapsedSec;
+      if (remaining <= 0) return finish('countdown');
+
+      el.timeDisplay.textContent = fmt(remaining);
+      renderRing(elapsedSec / c.duration, '');
+
+      if (!announcedHalfway && elapsedSec >= c.duration / 2) {
+        announcedHalfway = true;
+        speak('Halfway there', true);
+      }
+
+      maybeBeep(remaining, c.duration);
+    } else {
+      const c = cfg();
+      const p = intervalPhaseAt(elapsedSec, c);
+      if (!p) return finish('interval');
+
+      el.timeDisplay.textContent = fmt(p.remaining);
+      el.roundLabel.hidden = false;
+      el.roundLabel.textContent = 'Round ' + p.round + ' / ' + c.rounds;
+
+      const phaseLen = p.phase === 'work' ? c.work : c.rest;
+      renderRing((phaseLen - p.remaining) / phaseLen, p.phase);
+
+      el.phaseLabel.textContent = p.phase === 'work' ? 'Work' : 'Rest';
+      el.phaseLabel.className = 'ring__phase ' + (p.phase === 'work' ? 'is-work' : 'is-rest');
+
+      const phaseKey = p.phase + ':' + p.round;
+      if (phaseKey !== lastPhaseKey) {
+        lastPhaseKey = phaseKey;
+        lastSec = null;
+        if (p.phase === 'work') speak('Work. Round ' + p.round, true);
+        else speak('Rest', true);
+      }
+
+      maybeBeep(p.remaining, phaseLen);
+    }
+  }
+
+  function maybeBeep(remaining, phaseLen) {
+    const r = Math.ceil(remaining);
+    if (r === lastSec) return;      // fire once per whole second
+    if (r <= 0 || r >= Math.ceil(phaseLen)) { lastSec = r; return; } // skip the very start/end tick
+    lastSec = r;
+    const v = state.verbosity;
+    if (v === '1') beep();
+    else if (r <= 10 || r % 5 === 0) beep();
+  }
+
+  function finish(mode) {
+    state.status = 'finished';
+    stopTicker();
+    releaseWake();
+    el.timeDisplay.textContent = '00:00';
+    el.phaseLabel.textContent = 'Complete';
+    el.phaseLabel.className = 'ring__phase';
+    renderRing(1, '');
+    el.statusMsg.textContent = 'Workout complete.';
+    chime();
+    speak('Workout complete', true);
+    setPrimaryButton();
+  }
+
+  function stopTicker() {
+    if (ticker) { clearInterval(ticker); ticker = null; }
+  }
+
+  // ---------- controls ----------
+  function setPrimaryButton() {
+    el.primaryBtn.classList.remove('is-paused');
+    if (state.status === 'idle' || state.status === 'finished') {
+      el.primaryBtn.textContent = 'Start';
+    } else if (state.status === 'running') {
+      el.primaryBtn.textContent = 'Pause';
+    } else if (state.status === 'paused') {
+      el.primaryBtn.textContent = 'Resume';
+      el.primaryBtn.classList.add('is-paused');
+    }
+  }
+
+  function start() {
+    baseMs = 0; startTs = Date.now(); lastSec = null; lastPhaseKey = ''; announcedHalfway = false;
+    state.status = 'running';
+    el.statusMsg.textContent = '';
+    setInputsDisabled(true);
+    acquireWake();
+    unlockAudio();
+    if (state.mode === 'interval') speak('Work. Round 1', true);
+    else speak('Go', true);
+    stopTicker();
+    ticker = setInterval(tick, 150);
+    tick();
+    setPrimaryButton();
+  }
+
+  function pause() {
+    baseMs = baseMs + (Date.now() - startTs);
+    state.status = 'paused';
+    stopTicker();
+    releaseWake();
+    try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}
+    setPrimaryButton();
+  }
+
+  function resume() {
+    startTs = Date.now();
+    state.status = 'running';
+    acquireWake();
+    unlockAudio();
+    stopTicker();
+    ticker = setInterval(tick, 150);
+    setPrimaryButton();
+  }
+
+  function reset() {
+    stopTicker();
+    releaseWake();
+    try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {}
+    baseMs = 0; lastSec = null; lastPhaseKey = ''; announcedHalfway = false;
+    state.status = 'idle';
+    el.statusMsg.textContent = '';
+    setInputsDisabled(false);
+    renderIdlePreview();
+    setPrimaryButton();
+  }
+
+  el.primaryBtn.addEventListener('click', () => {
+    if (state.status === 'idle' || state.status === 'finished') start();
+    else if (state.status === 'running') pause();
+    else if (state.status === 'paused') resume();
+  });
+
+  el.resetBtn.addEventListener('click', reset);
+
+  el.muteBtn.addEventListener('click', () => {
+    state.muted = !state.muted;
+    el.muteBtn.setAttribute('aria-pressed', String(state.muted));
+    el.muteIconOn.style.display = state.muted ? 'none' : '';
+    el.muteIconOff.style.display = state.muted ? '' : 'none';
+    if (state.muted) { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {} }
+    else unlockAudio(); // unmuting is itself a gesture — good moment to (re)unlock
+  });
+
+  function setMode(mode) {
+    if (state.status === 'running' || state.status === 'paused') return;
+    state.mode = mode;
+    el.modeCountdownBtn.classList.toggle('is-active', mode === 'countdown');
+    el.modeCountdownBtn.setAttribute('aria-selected', String(mode === 'countdown'));
+    el.modeIntervalBtn.classList.toggle('is-active', mode === 'interval');
+    el.modeIntervalBtn.setAttribute('aria-selected', String(mode === 'interval'));
+    el.countdownConfig.hidden = mode !== 'countdown';
+    el.intervalConfig.hidden = mode !== 'interval';
+    renderIdlePreview();
+  }
+  el.modeCountdownBtn.addEventListener('click', () => setMode('countdown'));
+  el.modeIntervalBtn.addEventListener('click', () => setMode('interval'));
+
+  el.verbositySelect.addEventListener('change', () => { state.verbosity = el.verbositySelect.value; });
+
+  [el.durationInput, el.workInput, el.restInput, el.roundsInput].forEach(inp => {
+    inp.addEventListener('input', () => { if (state.status === 'idle') renderIdlePreview(); });
+  });
+
+  // ---------- init ----------
+  renderIdlePreview();
+  setPrimaryButton();
+})();
+</script>
+</body>
+</html>
